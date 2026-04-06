@@ -1,24 +1,52 @@
 import express from "express";
-import { register, login, refreshToken, logout } from "../controllers/auth.controller.js";
 import passport from "passport";
-import { signAccess, signRefresh } from "../utils/tokens.js";
-import User from "../models/User.js";
+import * as authController from "../controllers/auth.controller.js";
+import {
+  validateBody,
+  validateEmail,
+  validatePassword,
+} from "../middleware/validate.middleware.js";
 
-const r = express.Router();
+const router = express.Router();
 
-r.post("/register", register);
-r.post("/login", login);
-r.post("/refresh", refreshToken);
-r.post("/logout", logout);
+router.post(
+  "/register",
+  validateBody(["name", "email", "password"]),
+  validateEmail,
+  validatePassword,
+  authController.register
+);
+
+router.post(
+  "/login",
+  validateBody(["email", "password"]),
+  authController.login
+);
+
+router.post("/refresh", validateBody(["token"]), authController.refreshToken);
+
+router.post("/logout", validateBody(["token"]), authController.logout);
 
 // Google OAuth
-r.get("/google", passport.authenticate("google", { scope: ["profile", "email"] }));
-r.get("/google/callback", passport.authenticate("google", { session: false }), async (req, res) => {
-  const access = signAccess({ id: req.user._id, role: req.user.role });
-  const refresh = signRefresh({ id: req.user._id });
-  req.user.refreshTokens.push(refresh);
-  await req.user.save({ validateBeforeSave: false });
-  res.redirect(`${process.env.CLIENT_URL}/auth/callback?access=${access}&refresh=${refresh}`);
-});
+router.get(
+  "/google",
+  passport.authenticate("google", { scope: ["profile", "email"], session: false })
+);
+router.get(
+  "/google/callback",
+  passport.authenticate("google", { session: false, failureRedirect: "/login" }),
+  authController.oauthCallback
+);
 
-export default r;
+// GitHub OAuth
+router.get(
+  "/github",
+  passport.authenticate("github", { scope: ["user:email"], session: false })
+);
+router.get(
+  "/github/callback",
+  passport.authenticate("github", { session: false, failureRedirect: "/login" }),
+  authController.oauthCallback
+);
+
+export default router;
